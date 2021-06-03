@@ -1,0 +1,72 @@
+<launch>
+  <node pkg="nodelet" type="nodelet" args="manager" name="depth_image_nodelet_manager" output="screen"/>
+    <node pkg="nodelet" type="nodelet" name="pepper_pointcloud" args="load depth_image_proc/point_cloud_xyz depth_image_nodelet_manager --no-bond">
+        <remap from="camera_info" to="/pepper_robot/camera/depth/depth/camera_info"/>
+        <remap from="image_rect" to="/pepper_robot/camera/depth/depth/image_raw"/>
+    </node>
+
+    <!-- Pointcloud -> Laserscan -->
+     <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node" name="pepper_fake_laser">
+        <remap from="cloud_in" to="points" />
+        <param name="scan_time" type="double" value="0.2" />
+        <param name="range_min" type="double" value="0.4" />
+        <param name="range_max" type="double" value="8.0" />
+        <param name="use_inf" type="boolean" value="true" />
+        <param name="min_height" type="double" value="-0.3" />
+        <param name="max_height" type="double" value="0.3" />
+        <param name="target_frame" type="string" value="pepper_robot/base_link" />
+        <param name="concurrency_level" type="int" value="0" />
+    </node>
+
+  <group ns="rtabmap">
+
+    <!-- Use RGBD synchronization -->
+    <!-- Here is a general example using a standalone nodelet, 
+         but it is recommended to attach this nodelet to nodelet 
+         manager of the camera to avoid topic serialization -->
+    <node pkg="nodelet" type="nodelet" name="rgbd_sync" args="standalone rtabmap_ros/rgbd_sync" output="screen">
+      <!--<remap from="rgb/image"       to="/pepper_robot/camera/depth/ir/image_raw"/>-->
+      <remap from="rgb/image"       to="/pepper_robot/camera/front/image_raw"/>
+      <remap from="depth/image"     to="/pepper_robot/camera/depth/depth/image_raw"/>
+      <remap from="rgb/camera_info" to="/pepper_robot/camera/depth/depth/camera_info"/>
+      <remap from="rgbd_image"      to="rgbd_image"/> <!-- output -->
+      
+      <!-- Should be true for not synchronized camera topics 
+           (e.g., false for kinectv2, zed, realsense, true for xtion, kinect360)-->
+      <param name="approx_sync"       value="true"/> 
+    </node>
+
+    <node name="rtabmap" pkg="rtabmap_ros" type="rtabmap" output="screen" args="--delete_db_on_start">
+          <param name="frame_id" type="string" value="pepper_robot/base_link"/>
+
+          <param name="subscribe_depth" type="bool" value="true"/>
+          <param name="subscribe_rgbd" type="bool" value="false"/>
+          <param name="subscribe_scan" type="bool" value="true"/>
+
+          <remap from="odom" to="/pepper_robot/odom"/>
+          <remap from="scan" to="/scan"/>
+          <remap from="rgbd_image" to="rgbd_image"/>
+
+          <remap from="rgb/image"       to="/pepper_robot/camera/depth/ir/image_raw"/>
+          <remap from="depth/image"     to="/pepper_robot/camera/depth/depth/image_raw"/>
+          <remap from="rgb/camera_info" to="/pepper_robot/camera/depth/depth/camera_info"/>
+          <remap from="rgbd_image"      to="rgbd_image"/> <!-- output -->
+
+          <param name="queue_size" type="int" value="10"/>
+
+          <!-- RTAB-Map's parameters -->
+          <param name="RGBD/NeighborLinkRefining" type="string" value="true"/>
+          <param name="RGBD/ProximityBySpace"     type="string" value="true"/>
+          <param name="RGBD/AngularUpdate"        type="string" value="0.01"/>
+          <param name="RGBD/LinearUpdate"         type="string" value="0.01"/>
+          <param name="RGBD/OptimizeFromGraphEnd" type="string" value="false"/>
+          <param name="Grid/FromDepth"            type="string" value="false"/> <!-- occupancy grid from lidar -->
+          <param name="Reg/Force3DoF"             type="string" value="true"/>
+          <param name="Reg/Strategy"              type="string" value="1"/> <!-- 1=ICP -->
+          
+          <!-- ICP parameters -->
+          <param name="Icp/VoxelSize"                 type="string" value="0.05"/>
+          <param name="Icp/MaxCorrespondenceDistance" type="string" value="0.1"/>
+    </node>
+  </group>
+</launch>
